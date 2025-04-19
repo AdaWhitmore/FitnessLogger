@@ -7,6 +7,71 @@ A simple command-line tool to track workouts, nutrition, and progress.
 import argparse
 import sys
 from datetime import datetime
+from .models import WorkoutEntry, WeightEntry
+from .storage import DataStorage
+
+def handle_workout(args):
+    storage = DataStorage()
+    profile = storage.load_profile()
+
+    workout = WorkoutEntry(
+        date=datetime.now(),
+        exercise_type=args.type,
+        duration_minutes=args.duration or 0,
+        calories_burned=args.calories,
+        notes=args.notes or ""
+    )
+
+    profile.add_workout(workout)
+
+    if storage.save_profile(profile):
+        print(f"Workout logged: {args.type} for {workout.duration_minutes} minutes")
+    else:
+        print("Error saving workout data")
+
+def handle_weight(args):
+    storage = DataStorage()
+    profile = storage.load_profile()
+
+    weight_entry = WeightEntry(
+        date=datetime.now(),
+        weight=args.value,
+        unit=args.unit
+    )
+
+    profile.add_weight_entry(weight_entry)
+
+    if storage.save_profile(profile):
+        print(f"Weight logged: {args.value} {args.unit}")
+    else:
+        print("Error saving weight data")
+
+def handle_stats(args):
+    storage = DataStorage()
+    profile = storage.load_profile()
+
+    print(f"=== Fitness Stats ({args.period}) ===")
+
+    if args.period == 'week':
+        recent_workouts = profile.get_recent_workouts(7)
+    elif args.period == 'month':
+        recent_workouts = profile.get_recent_workouts(30)
+    else:
+        recent_workouts = profile.workouts
+
+    print(f"Total workouts: {len(recent_workouts)}")
+
+    if recent_workouts:
+        total_duration = sum(w.duration_minutes for w in recent_workouts)
+        print(f"Total exercise time: {total_duration} minutes")
+
+        total_calories = sum(w.calories_burned for w in recent_workouts if w.calories_burned)
+        if total_calories > 0:
+            print(f"Total calories burned: {total_calories}")
+
+    if profile.weight_history:
+        latest_weight = profile.weight_history[-1]
+        print(f"Current weight: {latest_weight.weight} {latest_weight.unit}")
 
 def main():
     parser = argparse.ArgumentParser(description='Personal Fitness Logger')
@@ -19,6 +84,7 @@ def main():
     workout_parser.add_argument('--type', required=True, help='Type of workout')
     workout_parser.add_argument('--duration', type=int, help='Duration in minutes')
     workout_parser.add_argument('--calories', type=int, help='Calories burned')
+    workout_parser.add_argument('--notes', help='Additional notes')
 
     # Weight tracking
     weight_parser = subparsers.add_parser('weight', help='Log weight measurements')
@@ -35,8 +101,12 @@ def main():
         parser.print_help()
         return
 
-    print(f"FitnessLogger - Command: {args.command}")
-    print("Feature coming soon...")
+    if args.command == 'workout':
+        handle_workout(args)
+    elif args.command == 'weight':
+        handle_weight(args)
+    elif args.command == 'stats':
+        handle_stats(args)
 
 if __name__ == '__main__':
     main()
