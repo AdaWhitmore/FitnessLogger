@@ -47,17 +47,23 @@ def handle_weight(args):
         print("Error saving weight data")
 
 def handle_stats(args):
+    from .analytics import FitnessAnalytics
+
     storage = DataStorage()
     profile = storage.load_profile()
+    analytics = FitnessAnalytics(profile)
 
     print(f"=== Fitness Stats ({args.period}) ===")
 
     if args.period == 'week':
         recent_workouts = profile.get_recent_workouts(7)
+        days = 7
     elif args.period == 'month':
         recent_workouts = profile.get_recent_workouts(30)
+        days = 30
     else:
         recent_workouts = profile.workouts
+        days = 365
 
     print(f"Total workouts: {len(recent_workouts)}")
 
@@ -69,9 +75,25 @@ def handle_stats(args):
         if total_calories > 0:
             print(f"Total calories burned: {total_calories}")
 
+    # Show analytics insights
+    if args.period == 'month':
+        consistency = analytics.workout_consistency_score(30)
+        print(f"Workout consistency: {consistency:.1%}")
+
+        weight_trend = analytics.weight_trend(30)
+        if weight_trend['trend'] != 'insufficient_data':
+            print(f"Weight trend: {weight_trend['trend']} ({weight_trend['change']:+.1f} kg)")
+
+    # Show current weight
     if profile.weight_history:
         latest_weight = profile.weight_history[-1]
         print(f"Current weight: {latest_weight.weight} {latest_weight.unit}")
+
+    # Performance insights
+    if args.period == 'month':
+        print("\n--- Insights ---")
+        for insight in analytics.performance_insights():
+            print(f"• {insight}")
 
 def main():
     parser = argparse.ArgumentParser(description='Personal Fitness Logger')
