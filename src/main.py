@@ -6,17 +6,26 @@ A simple command-line tool to track workouts, nutrition, and progress.
 
 import argparse
 import sys
+import json
 from datetime import datetime
 from .models import WorkoutEntry, WeightEntry
 from .storage import DataStorage
+from .utils import parse_workout_type, validate_positive_number
 
 def handle_workout(args):
+    if args.duration and not validate_positive_number(args.duration, "duration"):
+        return
+    if args.calories and not validate_positive_number(args.calories, "calories"):
+        return
+
     storage = DataStorage()
     profile = storage.load_profile()
 
+    exercise_type = parse_workout_type(args.type)
+
     workout = WorkoutEntry(
         date=datetime.now(),
-        exercise_type=args.type,
+        exercise_type=exercise_type,
         duration_minutes=args.duration or 0,
         calories_burned=args.calories,
         notes=args.notes or ""
@@ -25,11 +34,16 @@ def handle_workout(args):
     profile.add_workout(workout)
 
     if storage.save_profile(profile):
-        print(f"Workout logged: {args.type} for {workout.duration_minutes} minutes")
+        print(f"Workout logged: {exercise_type} for {workout.duration_minutes} minutes")
+        if workout.calories_burned:
+            print(f"Calories burned: {workout.calories_burned}")
     else:
         print("Error saving workout data")
 
 def handle_weight(args):
+    if not validate_positive_number(args.value, "weight"):
+        return
+
     storage = DataStorage()
     profile = storage.load_profile()
 
@@ -43,6 +57,13 @@ def handle_weight(args):
 
     if storage.save_profile(profile):
         print(f"Weight logged: {args.value} {args.unit}")
+
+        # Show change from last entry if available
+        if len(profile.weight_history) > 1:
+            prev_weight = profile.weight_history[-2].weight
+            change = args.value - prev_weight
+            direction = "↑" if change > 0 else "↓" if change < 0 else "→"
+            print(f"Change: {direction} {abs(change):.1f} {args.unit}")
     else:
         print("Error saving weight data")
 
@@ -95,6 +116,67 @@ def handle_stats(args):
         for insight in analytics.performance_insights():
             print(f"• {insight}")
 
+def handle_list(args):
+    storage = DataStorage()
+    profile = storage.load_profile()
+
+    recent_workouts = profile.get_recent_workouts(args.days)
+
+    if not recent_workouts:
+        print(f"No workouts found in the last {args.days} days")
+        return
+
+    print(f"=== Recent Workouts (last {args.days} days) ===")
+
+    recent_workouts.sort(key=lambda x: x.date, reverse=True)
+
+    for workout in recent_workouts:
+        date_str = workout.date.strftime("%Y-%m-%d %H:%M")
+        duration = f"{workout.duration_minutes}min" if workout.duration_minutes else "N/A"
+        calories = f", {workout.calories_burned} cal" if workout.calories_burned else ""
+
+        print(f"{date_str} - {workout.exercise_type} ({duration}{calories})")
+        if workout.notes:
+            print(f"  Notes: {workout.notes}")
+
+def handle_export(args):
+    storage = DataStorage()
+    profile = storage.load_profile()
+
+    if args.format == 'json':
+        data = profile.to_dict()
+        output = json.dumps(data, indent=2, default=str)
+    elif args.format == 'csv':
+        import csv
+        import io
+
+        output_buffer = io.StringIO()
+
+        # Write workouts
+        writer = csv.writer(output_buffer)
+        writer.writerow(['Date', 'Type', 'Duration (min)', 'Calories', 'Notes'])
+
+        for workout in profile.workouts:
+            writer.writerow([
+                workout.date.strftime('%Y-%m-%d %H:%M'),
+                workout.exercise_type,
+                workout.duration_minutes,
+                workout.calories_burned or '',
+                workout.notes
+            ])
+
+        output = output_buffer.getvalue()
+
+    if args.output:
+        try:
+            with open(args.output, 'w') as f:
+                f.write(output)
+            print(f"Data exported to {args.output}")
+        except Exception as e:
+            print(f"Error writing to file: {e}")
+    else:
+        print(output)
+
 def main():
     parser = argparse.ArgumentParser(description='Personal Fitness Logger')
     parser.add_argument('--version', action='version', version='FitnessLogger 0.1.0')
@@ -117,6 +199,15 @@ def main():
     stats_parser = subparsers.add_parser('stats', help='View fitness statistics')
     stats_parser.add_argument('--period', default='week', choices=['week', 'month', 'year'])
 
+    # List workouts command
+    list_parser = subparsers.add_parser('list', help='List recent workouts')
+    list_parser.add_argument('--days', type=int, default=7, help='Number of days to show')
+
+    # Export command
+    export_parser = subparsers.add_parser('export', help='Export data')
+    export_parser.add_argument('--format', default='json', choices=['json', 'csv'])
+    export_parser.add_argument('--output', help='Output file path')
+
     args = parser.parse_args()
 
     if not args.command:
@@ -129,6 +220,10 @@ def main():
         handle_weight(args)
     elif args.command == 'stats':
         handle_stats(args)
+    elif args.command == 'list':
+        handle_list(args)
+    elif args.command == 'export':
+        handle_export(args)
 
 if __name__ == '__main__':
     main()
