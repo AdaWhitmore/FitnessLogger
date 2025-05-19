@@ -179,7 +179,7 @@ def handle_export(args):
 
 def main():
     parser = argparse.ArgumentParser(description='Personal Fitness Logger')
-    parser.add_argument('--version', action='version', version='FitnessLogger 0.1.0')
+    parser.add_argument('--version', action='version', version='FitnessLogger 0.2.0')
 
     subparsers = parser.add_subparsers(dest='command', help='Available commands')
 

@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="fitness-logger",
-    version="0.1.0",
+    version="0.2.0",
     description="Personal fitness tracking tool",
     author="Ada Whitmore",
     author_email="mkyuajcyu7911@hotmail.com",
